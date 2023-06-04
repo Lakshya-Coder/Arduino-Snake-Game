@@ -1,3 +1,7 @@
+#define WELCOME_STATE 0
+#define GAMEPLAY_STATE 1
+#define GAMVEOVER_STATE 2
+
 #define TURN_UP 0
 #define TURN_RIGHT 1
 #define TURN_LEFT 3

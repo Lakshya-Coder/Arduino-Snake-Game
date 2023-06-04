@@ -7,12 +7,23 @@
 
 Adafruit_SSD1306 lcd(screenWidth, screenHeight, &Wire, -1);
 
+enum GameState {
+  WELCOME_STATE,
+  GAMEPLAY_STATE,
+  GAMEOVER_STATE
+};
+
+int gameState = WELCOME_STATE;
+
+bool isWantDisplayFlickeing = false;
+unsigned long lastDisplayFlickering = 0;
+
 bool isWantCollectFruitSound = false;
 bool isWantButtonPressedSound = false;
-unsigned long lastBuzzerPlayed = 0;
+unsigned long lastBuzzerPlayed = 0; 
 
 struct Position {
-  int x, y;  
+  int x, y;
 
   bool operator==(const Position& other) const {
     return x == other.x && y == other.y;
@@ -135,27 +146,14 @@ void pushToStart() {
   lcd.print(F("Push to start"));
 }
 
-void flashScreen() {
-  lcd.invertDisplay(true);
-  handelSound();
-  delay(100);
-  handelSound();
-  lcd.invertDisplay(false);
-  delay(200);
-  handelSound();
-}
-
 void playIntro() {
   lcd.clearDisplay();
   lcd.drawBitmap(18, 0, kSplashScreen, 92, 56, WHITE);
   pushToStart();
   lcd.display();
-  waitForInput();
-  flashScreen();
 }
 
 void playGameover() {
-  flashScreen();
   lcd.clearDisplay();
   lcd.drawBitmap(4, 0, kGameOver, 124, 38, WHITE);
   int score = player.size - startLength;
@@ -175,8 +173,6 @@ void playGameover() {
   lcd.print(hiscore);
   pushToStart();
   lcd.display();
-  waitForInput();
-  flashScreen();
 }
 
 void resetGame() {
@@ -197,15 +193,12 @@ void resetGame() {
 void updateGame() {
   player.update();
   
-  if(player.pos == item.pos) {
-    isWantCollectFruitSound = true;
-    lastBuzzerPlayed = millis();
-    player.size++;
-    item.spawn();
-  } else if(test_position(player.pos)) {
-    playGameover();
-    resetGame();
-  }
+  
+}
+
+bool isGameOver() {
+  if (player.pos == item.pos) return false;
+  return test_position(player.pos);
 }
 
 void input() {
@@ -242,16 +235,76 @@ void setup() {
 
   lcd.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-  lcd.setTextColor(WHITE);
-  playIntro();
-  resetGame();
+  lcd.setTextColor(WHITE);  
 }
 
 void loop() {
-  input();
-  updateGame();
+  handelGameState();
   handelSound();
-  render();
+  handelDisplayFlickring();
+}
+
+void handelGameState() {
+  switch (gameState) {
+    case WELCOME_STATE:
+      playIntro();
+
+      if (digitalRead(SW_PIN) == LOW) {
+        playBtnClickedSound();
+        isWantDisplayFlickeing = true;
+        lastDisplayFlickering = millis();
+
+        resetGame();
+        gameState = GAMEPLAY_STATE;
+      }
+
+      break;
+    case GAMEPLAY_STATE:
+      input();
+      player.update();
+
+      if (player.pos == item.pos) {
+        isWantCollectFruitSound = true;
+        lastBuzzerPlayed = millis();
+        player.size++;
+        item.spawn();
+      } else if (isGameOver()) {
+        gameState = GAMVEOVER_STATE;
+        isWantDisplayFlickeing = true;
+        lastDisplayFlickering = millis();
+      }
+
+      render();
+      break;
+    case GAMVEOVER_STATE:
+      playGameover();
+
+      if (digitalRead(SW_PIN) == LOW) {
+        playBtnClickedSound();
+        isWantDisplayFlickeing = true;
+        lastDisplayFlickering = millis();
+
+        resetGame();
+        gameState = GAMEPLAY_STATE;
+      }
+
+      break;
+  }
+}
+
+void playBtnClickedSound() {
+  isWantButtonPressedSound = true;
+  lastBuzzerPlayed = millis();
+}
+
+void handelDisplayFlickring() {
+  if (isWantDisplayFlickeing) {
+    if (millis() <= lastDisplayFlickering + 50) {
+      lcd.invertDisplay(true);
+    } else {
+      lcd.invertDisplay(false);
+    }
+  }
 }
 
 void handelSound() {
@@ -265,7 +318,7 @@ void handelSound() {
       isWantCollectFruitSound = false;
     }
   } else if (isWantButtonPressedSound) {
-    if (millis() <= lastBuzzerPlayed + 120) {
+    if (millis() <= lastBuzzerPlayed + 200) {
       tone(BUZZER_PIN, NOTE_AS2, 120);
     } else {
       noTone(BUZZER_PIN);
